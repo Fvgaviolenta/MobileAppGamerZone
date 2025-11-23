@@ -28,6 +28,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.window.Dialog
 import com.example.appgamerzone.data.model.ProductCategory
 import com.example.appgamerzone.viewmodel.HomeViewModel
 
@@ -49,6 +52,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val showPromoDialog = remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.loadFeaturedProducts()
@@ -84,7 +88,8 @@ fun HomeScreen(
 
             // Sección de promociones (reemplaza productos destacados)
             PromotionsSection(
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = 16.dp),
+                onPromoClick = { showPromoDialog.value = true }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -95,6 +100,9 @@ fun HomeScreen(
                 onCategoryClick = onCategoryClick,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
+            if (showPromoDialog.value) {
+                PromotionalDialog(onDismiss = { showPromoDialog.value = false })
+            }
         }
     }
 }
@@ -220,7 +228,8 @@ fun WelcomeBanner(
 
 @Composable
 fun PromotionsSection(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPromoClick: () -> Unit
 ) {
     Column(modifier = modifier) {
         Text(
@@ -236,20 +245,21 @@ fun PromotionsSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(getPromotions()) { promotion ->
-                PromotionCard(promotion)
+                PromotionCard(promotion, onClick = onPromoClick)
             }
         }
     }
 }
 
 @Composable
-fun PromotionCard(promotion: Promotion) {
+fun PromotionCard(promotion: Promotion, onClick: () -> Unit) {
     Card(
         modifier = Modifier.width(280.dp),
         colors = CardDefaults.cardColors(
             containerColor = promotion.cardColor
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        onClick = onClick
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -359,19 +369,32 @@ fun getPromotions(): List<Promotion> {
             title = "Primera Compra",
             description = "Descuento especial para nuevos clientes",
             discount = "15% OFF",
-            cardColor = androidx.compose.ui.graphics.Color(0xFF8B5CF6) // Purple
-        ),
-        Promotion(
-            title = "Gamer Pack",
-            description = "Combo perfecto para streamers",
-            discount = "25% OFF",
-            cardColor = androidx.compose.ui.graphics.Color(0xFF06B6D4) // Blue
-        ),
-        Promotion(
-            title = "Weekend Sale",
-            description = "Ofertas especiales de fin de semana",
-            discount = "30% OFF",
-            cardColor = androidx.compose.ui.graphics.Color(0xFF10B981) // Green
+            cardColor = androidx.compose.ui.graphics.Color(0xFF8B5CF6)
         )
     )
+}
+
+@Composable
+fun PromotionalDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val resId = context.resources.getIdentifier("etiqueta_promocional", "drawable", context.packageName)
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        ) {
+            if (resId != 0) {
+                Image(
+                    painter = painterResource(id = resId),
+                    contentDescription = "Etiqueta promocional",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+    }
 }

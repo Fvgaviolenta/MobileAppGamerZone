@@ -7,14 +7,50 @@ import kotlinx.coroutines.tasks.await
 class FirebaseProductRepository {
     private val db = FirebaseFirestore.getInstance()
     private val productsCollection = db.collection("products")
+    private val localProducts = listOf(
+        Product(
+            name = "PlayStation 5",
+            price = 599990.0,
+            category = "Consolas",
+            description = "Consola de última generación",
+            imageUrl = "",
+            stock = 5,
+            rating = 4.8,
+            reviewCount = 1200
+        ),
+        Product(
+            name = "Xbox Series X",
+            price = 549990.0,
+            category = "Consolas",
+            description = "Rendimiento 4K real",
+            imageUrl = "",
+            stock = 8,
+            rating = 4.7,
+            reviewCount = 980
+        ),
+        Product(
+            name = "The Last of Us Part II",
+            price = 39990.0,
+            category = "Juegos",
+            description = "Aventura épica",
+            imageUrl = "",
+            stock = 25,
+            rating = 4.9,
+            reviewCount = 5600
+        )
+    )
+
+    private fun normalizeName(name: String): String = name.trim().lowercase()
 
     suspend fun getAllProducts(): Result<List<Product>> {
         return try {
             val querySnapshot = productsCollection.get().await()
-            val products = querySnapshot.documents.mapNotNull { document ->
+            val remote = querySnapshot.documents.mapNotNull { document ->
                 document.data?.let { Product.fromMap(document.id, it) }
             }
-            Result.success(products)
+            val remoteNames = remote.map { normalizeName(it.name) }.toSet()
+            val extras = localProducts.filter { normalizeName(it.name) !in remoteNames }
+            Result.success(remote + extras)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -26,11 +62,13 @@ class FirebaseProductRepository {
                 .whereEqualTo("category", category)
                 .get()
                 .await()
-
-            val products = querySnapshot.documents.mapNotNull { document ->
+            val remote = querySnapshot.documents.mapNotNull { document ->
                 document.data?.let { Product.fromMap(document.id, it) }
             }
-            Result.success(products)
+            val remoteNames = remote.map { normalizeName(it.name) }.toSet()
+            val localFiltered = localProducts.filter { it.category == category }
+            val extras = localFiltered.filter { normalizeName(it.name) !in remoteNames }
+            Result.success(remote + extras)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -117,10 +155,10 @@ class FirebaseProductRepository {
     suspend fun getCategories(): Result<List<String>> {
         return try {
             val querySnapshot = productsCollection.get().await()
-            val categories = querySnapshot.documents
+            val remoteCats = querySnapshot.documents
                 .mapNotNull { it.data?.get("category") as? String }
-                .distinct()
-                .sorted()
+            val localCats = localProducts.map { it.category }
+            val categories = (remoteCats + localCats).distinct().sorted()
             Result.success(categories)
         } catch (e: Exception) {
             Result.failure(e)
