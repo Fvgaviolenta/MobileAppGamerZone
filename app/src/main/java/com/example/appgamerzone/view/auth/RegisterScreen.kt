@@ -134,7 +134,7 @@ fun RegisterScreen(
 @Composable
 fun RegisterHeroImage(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val resId = context.resources.getIdentifier("gamer_zone", "drawable", context.packageName)
+    val resId = context.resources.getIdentifier("login01", "drawable", context.packageName)
 
     Card(
         modifier = modifier,
