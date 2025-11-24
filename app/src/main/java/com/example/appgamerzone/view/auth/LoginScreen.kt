@@ -116,30 +116,30 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedTextField(
-                value = uiState.password,
-                onValueChange = { viewModel.updatePassword(it) },
-                label = { Text("Contraseña") },
-                singleLine = true,
-                isError = uiState.passwordError != null,
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        if (passwordVisible) {
-                            Icon(Icons.Filled.VisibilityOff, contentDescription = "Ocultar")
-                        } else {
-                            Icon(Icons.Filled.Visibility, contentDescription = "Mostrar")
-                        }
-                    }
-                },
-                supportingText = {
-                    AnimatedVisibility(visible = uiState.passwordError != null) {
-                        Text(uiState.passwordError ?: "", color = MaterialTheme.colorScheme.error)
-                    }
-                },
-                keyboardOptions = KeyboardOptions.Default,
-                modifier = Modifier.fillMaxWidth()
-            )
+    OutlinedTextField(
+        value = uiState.password,
+        onValueChange = { viewModel.updatePassword(it) },
+        label = { Text("Contraseña") },
+        singleLine = true,
+        isError = uiState.passwordError != null,
+        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                if (passwordVisible) {
+                    Icon(Icons.Filled.VisibilityOff, contentDescription = "Ocultar")
+                } else {
+                    Icon(Icons.Filled.Visibility, contentDescription = "Mostrar")
+                }
+            }
+        },
+        supportingText = {
+            AnimatedVisibility(visible = uiState.passwordError != null) {
+                Text(uiState.passwordError ?: "", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        keyboardOptions = KeyboardOptions.Default,
+        modifier = Modifier.fillMaxWidth()
+    )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -171,6 +171,16 @@ fun LoginScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = { viewModel.loginAsGuest() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Entrar como invitado")
+            }
 
             TextButton(
                 onClick = onNavigateToRegister,
@@ -204,13 +214,23 @@ fun LoginScreen(
 fun LoginHeroImage(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val resId = context.resources.getIdentifier("gamer_zone", "drawable", context.packageName)
+    val loginResId = context.resources.getIdentifier("login01", "drawable", context.packageName)
 
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        if (resId != 0) {
+        if (loginResId != 0) {
+            Image(
+                painter = painterResource(id = loginResId),
+                contentDescription = "Login",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
+                contentScale = ContentScale.Fit
+            )
+        } else if (resId != 0) {
             Image(
                 painter = painterResource(id = resId),
                 contentDescription = "Gamer Zone",

@@ -150,16 +150,26 @@ fun HomeHeader(
 @Composable
 fun HeroBannerImage(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val resId = context.resources.getIdentifier("gamer_zone", "drawable", context.packageName)
+    val loginResId = context.resources.getIdentifier("login01", "drawable", context.packageName)
+    val fallbackResId = context.resources.getIdentifier("gamer_zone", "drawable", context.packageName)
 
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        if (resId != 0) {
+        if (loginResId != 0) {
             Image(
-                painter = painterResource(id = resId),
+                painter = painterResource(id = loginResId),
+                contentDescription = "Login banner",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                contentScale = ContentScale.Crop
+            )
+        } else if (fallbackResId != 0) {
+            Image(
+                painter = painterResource(id = fallbackResId),
                 contentDescription = "Gamer Zone banner",
                 modifier = Modifier
                     .fillMaxWidth()
@@ -182,15 +192,15 @@ fun HeroBannerImage(modifier: Modifier = Modifier) {
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    "Añade la imagen en res/drawable como gamer_zone.png para mostrarla",
+                    "Añade la imagen en res/drawable como login01.png para mostrarla",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp)
                 )
-            }
         }
     }
+}
 }
 
 @Composable
@@ -377,7 +387,10 @@ fun getPromotions(): List<Promotion> {
 @Composable
 fun PromotionalDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val resId = context.resources.getIdentifier("etiqueta_promocional", "drawable", context.packageName)
+    val id1 = context.resources.getIdentifier("popup", "drawable", context.packageName)
+    val id2 = context.resources.getIdentifier("pop_up", "drawable", context.packageName)
+    val id3 = context.resources.getIdentifier("popUp", "drawable", context.packageName)
+    val resId = listOf(id1, id2, id3).firstOrNull { it != 0 } ?: 0
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -388,7 +401,7 @@ fun PromotionalDialog(onDismiss: () -> Unit) {
             if (resId != 0) {
                 Image(
                     painter = painterResource(id = resId),
-                    contentDescription = "Etiqueta promocional",
+                    contentDescription = "Popup promocional",
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
