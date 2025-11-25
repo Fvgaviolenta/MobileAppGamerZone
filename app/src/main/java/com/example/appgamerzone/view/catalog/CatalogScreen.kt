@@ -7,10 +7,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,9 +29,10 @@ import com.example.appgamerzone.data.model.Product
 @Composable
 fun CatalogScreen(
     category: String? = null,
-    onOpenDrawer: () -> Unit,
-    onNavigateToCart: () -> Unit,
+    onOpenDrawer: () -> Unit = {},
+    onBackClick: () -> Unit,
     onProductClick: (String) -> Unit,
+    onNavigateToCart: () -> Unit = {},
     cartViewModel: CartViewModel
 ) {
     val context = LocalContext.current
@@ -89,7 +89,7 @@ fun CatalogScreen(
                     }
                 },
                 actions = {
-                    // Badge y botón de carrito clicable
+                    // Badge mostrando cantidad de items en el carrito
                     IconButton(onClick = onNavigateToCart) {
                         BadgedBox(
                             badge = {

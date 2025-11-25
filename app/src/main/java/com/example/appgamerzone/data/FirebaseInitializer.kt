@@ -3,6 +3,11 @@ package com.example.appgamerzone.data
 import com.example.appgamerzone.data.repository.FirebaseAuthRepository
 import com.example.appgamerzone.data.repository.FirebaseProductRepository
 
+// ============================================
+// CLASE COMENTADA: Ya no se usa inicialización automática
+// Los productos y usuarios deben crearse manualmente
+// ============================================
+/*
 class FirebaseInitializer {
     private val authRepository = FirebaseAuthRepository()
     private val productRepository = FirebaseProductRepository()
@@ -27,4 +32,5 @@ class FirebaseInitializer {
         }
     }
 }
+*/
 

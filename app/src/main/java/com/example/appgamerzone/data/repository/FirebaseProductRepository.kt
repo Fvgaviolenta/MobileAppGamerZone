@@ -7,50 +7,14 @@ import kotlinx.coroutines.tasks.await
 class FirebaseProductRepository {
     private val db = FirebaseFirestore.getInstance()
     private val productsCollection = db.collection("products")
-    private val localProducts = listOf(
-        Product(
-            name = "PlayStation 5",
-            price = 599990.0,
-            category = "Consolas",
-            description = "Consola de última generación",
-            imageUrl = "",
-            stock = 5,
-            rating = 4.8,
-            reviewCount = 1200
-        ),
-        Product(
-            name = "Xbox Series X",
-            price = 549990.0,
-            category = "Consolas",
-            description = "Rendimiento 4K real",
-            imageUrl = "",
-            stock = 8,
-            rating = 4.7,
-            reviewCount = 980
-        ),
-        Product(
-            name = "The Last of Us Part II",
-            price = 39990.0,
-            category = "Juegos",
-            description = "Aventura épica",
-            imageUrl = "",
-            stock = 25,
-            rating = 4.9,
-            reviewCount = 5600
-        )
-    )
-
-    private fun normalizeName(name: String): String = name.trim().lowercase()
 
     suspend fun getAllProducts(): Result<List<Product>> {
         return try {
             val querySnapshot = productsCollection.get().await()
-            val remote = querySnapshot.documents.mapNotNull { document ->
+            val products = querySnapshot.documents.mapNotNull { document ->
                 document.data?.let { Product.fromMap(document.id, it) }
             }
-            val remoteNames = remote.map { normalizeName(it.name) }.toSet()
-            val extras = localProducts.filter { normalizeName(it.name) !in remoteNames }
-            Result.success(remote + extras)
+            Result.success(products)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -62,13 +26,10 @@ class FirebaseProductRepository {
                 .whereEqualTo("category", category)
                 .get()
                 .await()
-            val remote = querySnapshot.documents.mapNotNull { document ->
+            val products = querySnapshot.documents.mapNotNull { document ->
                 document.data?.let { Product.fromMap(document.id, it) }
             }
-            val remoteNames = remote.map { normalizeName(it.name) }.toSet()
-            val localFiltered = localProducts.filter { it.category == category }
-            val extras = localFiltered.filter { normalizeName(it.name) !in remoteNames }
-            Result.success(remote + extras)
+            Result.success(products)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -155,115 +116,11 @@ class FirebaseProductRepository {
     suspend fun getCategories(): Result<List<String>> {
         return try {
             val querySnapshot = productsCollection.get().await()
-            val remoteCats = querySnapshot.documents
+            val categories = querySnapshot.documents
                 .mapNotNull { it.data?.get("category") as? String }
-            val localCats = localProducts.map { it.category }
-            val categories = (remoteCats + localCats).distinct().sorted()
+                .distinct()
+                .sorted()
             Result.success(categories)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun initializeSampleProducts(): Result<List<Product>> {
-        return try {
-            // Verificar si ya hay productos
-            val existing = productsCollection.limit(1).get().await()
-            if (!existing.isEmpty) {
-                return getAllProducts()
-            }
-
-            // Crear productos de ejemplo
-            val sampleProducts = listOf(
-                Product(
-                    name = "PlayStation 5",
-                    price = 599990.0,
-                    category = "Consolas",
-                    description = "Consola de última generación con gráficos 4K y SSD ultrarrápido",
-                    imageUrl = "https://i.imgur.com/8JYrs6D.png",
-                    stock = 10,
-                    rating = 4.8,
-                    reviewCount = 1250
-                ),
-                Product(
-                    name = "Xbox Series X",
-                    price = 549990.0,
-                    category = "Consolas",
-                    description = "La Xbox más potente con rendimiento 4K real",
-                    imageUrl = "https://i.imgur.com/xq6sZHL.png",
-                    stock = 8,
-                    rating = 4.7,
-                    reviewCount = 980
-                ),
-                Product(
-                    name = "Nintendo Switch OLED",
-                    price = 399990.0,
-                    category = "Consolas",
-                    description = "Consola híbrida con pantalla OLED de 7 pulgadas",
-                    imageUrl = "https://i.imgur.com/n7u9s1T.png",
-                    stock = 15,
-                    rating = 4.9,
-                    reviewCount = 2100
-                ),
-                Product(
-                    name = "The Last of Us Part II",
-                    price = 39990.0,
-                    category = "Juegos",
-                    description = "Aventura épica exclusiva de PlayStation",
-                    imageUrl = "https://i.imgur.com/bqClxhV.png",
-                    stock = 25,
-                    rating = 4.9,
-                    reviewCount = 5600
-                ),
-                Product(
-                    name = "Zelda: Tears of the Kingdom",
-                    price = 59990.0,
-                    category = "Juegos",
-                    description = "La secuela épica de Breath of the Wild",
-                    imageUrl = "https://i.imgur.com/RZGj9nZ.png",
-                    stock = 20,
-                    rating = 5.0,
-                    reviewCount = 8900
-                ),
-                Product(
-                    name = "Control DualSense",
-                    price = 69990.0,
-                    category = "Accesorios",
-                    description = "Control inalámbrico con respuesta háptica",
-                    imageUrl = "https://i.imgur.com/nVGz5Gk.png",
-                    stock = 30,
-                    rating = 4.6,
-                    reviewCount = 3200
-                ),
-                Product(
-                    name = "Auriculares Gaming RGB",
-                    price = 89990.0,
-                    category = "Accesorios",
-                    description = "Auriculares con sonido envolvente 7.1 y micrófono",
-                    imageUrl = "https://i.imgur.com/xZnqJKM.png",
-                    stock = 18,
-                    rating = 4.5,
-                    reviewCount = 1800
-                ),
-                Product(
-                    name = "Teclado Mecánico RGB",
-                    price = 129990.0,
-                    category = "Accesorios",
-                    description = "Teclado mecánico para gaming con switches Cherry MX",
-                    imageUrl = "https://i.imgur.com/QK5xJlM.png",
-                    stock = 12,
-                    rating = 4.7,
-                    reviewCount = 2400
-                )
-            )
-
-            val createdProducts = mutableListOf<Product>()
-            for (product in sampleProducts) {
-                val result = createProduct(product)
-                result.getOrNull()?.let { createdProducts.add(it) }
-            }
-
-            Result.success(createdProducts)
         } catch (e: Exception) {
             Result.failure(e)
         }

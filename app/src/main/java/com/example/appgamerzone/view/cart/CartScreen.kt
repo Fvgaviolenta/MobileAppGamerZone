@@ -4,23 +4,23 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.example.appgamerzone.data.model.CartItem
 import com.example.appgamerzone.viewmodel.CartViewModel
@@ -30,7 +30,8 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CartScreen(
-    onOpenDrawer: () -> Unit,
+    onOpenDrawer: () -> Unit = {},
+    onBackClick: () -> Unit,
     onScanQR: () -> Unit,
     onGoToCatalog: () -> Unit,
     viewModel: CartViewModel
@@ -39,18 +40,15 @@ fun CartScreen(
     var discountCodeInput by remember { mutableStateOf("") }
     var showCheckoutDialog by remember { mutableStateOf(false) }
 
-    val lifecycleOwner = LocalLifecycleOwner.current
-
     // Recargar el carrito cada vez que se muestre esta pantalla
     LaunchedEffect(Unit) {
         viewModel.loadCart()
     }
 
-    // Recargar cuando la pantalla vuelve del background
-    LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            viewModel.loadCart()
-        }
+    // Observar cambios en el carrito para recargarlo
+    val cartItemsCount = uiState.items.size
+    LaunchedEffect(cartItemsCount) {
+        // Si hay cambios, esto ayuda a mantener la UI actualizada
     }
 
     LaunchedEffect(uiState.checkoutSuccess) {
@@ -64,6 +62,7 @@ fun CartScreen(
             onDismissRequest = {
                 showCheckoutDialog = false
                 viewModel.resetCheckoutState()
+                onBackClick()
             },
             icon = {
                 Icon(
@@ -87,6 +86,7 @@ fun CartScreen(
                 Button(onClick = {
                     showCheckoutDialog = false
                     viewModel.resetCheckoutState()
+                    onBackClick()
                 }) {
                     Text("Aceptar")
                 }
@@ -119,31 +119,14 @@ fun CartScreen(
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.padding(32.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(
-                        Icons.Default.ShoppingCart,
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
                     Text(
                         "Tu carrito está vacío",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.titleLarge
                     )
-                    Text(
-                        "Agrega productos desde el catálogo",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = onGoToCatalog,
-                        modifier = Modifier.fillMaxWidth(0.6f)
-                    ) {
-                        Text("Ir al catálogo")
+                    Button(onClick = onGoToCatalog) {
+                        Text("Ir a comprar")
                     }
                 }
             }
@@ -199,7 +182,20 @@ fun CartScreen(
                                         label = { Text("Código") },
                                         modifier = Modifier.weight(1f),
                                         singleLine = true,
-                                        enabled = !uiState.isDiscountApplied
+                                        enabled = !uiState.isDiscountApplied,
+                                        isError = uiState.discountError != null,
+                                        supportingText = {
+                                            if (uiState.discountError != null) {
+                                                Text(
+                                                    text = uiState.discountError!!,
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            }
+                                        },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            errorBorderColor = MaterialTheme.colorScheme.error,
+                                            errorLabelColor = MaterialTheme.colorScheme.error
+                                        )
                                     )
 
                                     Button(
@@ -207,6 +203,28 @@ fun CartScreen(
                                         enabled = !uiState.isDiscountApplied && discountCodeInput.isNotEmpty()
                                     ) {
                                         Text("Aplicar")
+                                    }
+                                }
+
+                                // Mostrar descuento aplicado
+                                if (uiState.isDiscountApplied) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "✓ Código aplicado: ${uiState.discountCode}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        TextButton(onClick = {
+                                            discountCodeInput = ""
+                                            viewModel.removeDiscount()
+                                        }) {
+                                            Text("Quitar")
+                                        }
                                     }
                                 }
 
@@ -420,7 +438,7 @@ fun CartItemCard(
 }
 
 private fun formatPrice(price: Double): String {
-    val format = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-CL"))
+    val format = NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("es").setRegion("CL").build())
     return format.format(price)
 }
 

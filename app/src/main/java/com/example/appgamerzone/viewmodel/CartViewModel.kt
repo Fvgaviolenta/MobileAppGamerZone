@@ -8,6 +8,7 @@ import com.example.appgamerzone.data.model.CartItem
 import com.example.appgamerzone.data.model.Order
 import com.example.appgamerzone.data.repository.FirebaseAuthRepository
 import com.example.appgamerzone.data.repository.FirebaseCartRepository
+import com.example.appgamerzone.data.repository.FirebaseDiscountRepository
 import com.example.appgamerzone.data.repository.FirebaseProductRepository
 import com.example.appgamerzone.data.session.UserSessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,9 +23,12 @@ data class CartUiState(
     val error: String? = null,
     val subtotal: Double = 0.0,
     val discount: Double = 0.0,
+    val discountPercentage: Double = 0.0,
     val total: Double = 0.0,
     val discountCode: String = "",
+    val discountCodeId: String = "",
     val isDiscountApplied: Boolean = false,
+    val discountError: String? = null,
     val checkoutSuccess: Boolean = false,
     val lastOrder: Order? = null
 ) {
@@ -35,7 +39,8 @@ data class CartUiState(
 class CartViewModel(
     private val context: Context,
     private val cartRepository: FirebaseCartRepository = FirebaseCartRepository(FirebaseProductRepository()),
-    private val authRepository: FirebaseAuthRepository = FirebaseAuthRepository()
+    private val authRepository: FirebaseAuthRepository = FirebaseAuthRepository(),
+    private val discountRepository: FirebaseDiscountRepository = FirebaseDiscountRepository()
 ) : ViewModel() {
 
     companion object {
@@ -49,117 +54,79 @@ class CartViewModel(
 
     init {
         // Cargar el carrito al inicializar el ViewModel
-        Log.d(TAG, "🔵 CartViewModel inicializado")
-
-        // Verificar que hay un usuario en sesión
-        viewModelScope.launch {
-            sessionManager.currentUserId.collect { userId ->
-                Log.d(TAG, "🔵 USUARIO EN SESIÓN: ${userId ?: "NULL - NO HAY SESIÓN"}")
-                if (userId != null) {
-                    Log.d(TAG, "🔵 Cargando carrito para usuario: $userId")
-                    loadCart()
-                } else {
-                    Log.e(TAG, "❌ NO HAY USUARIO EN SESIÓN - No se puede cargar carrito")
-                }
-            }
-        }
+        Log.d(TAG, "CartViewModel inicializado")
+        loadCart()
     }
 
     fun loadCart() {
         viewModelScope.launch {
-            Log.d(TAG, "")
-            Log.d(TAG, "📥 ==========================================")
-            Log.d(TAG, "📥 CARGANDO CARRITO")
-            Log.d(TAG, "📥 ==========================================")
-
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             val userId = sessionManager.currentUserId.first()
-            Log.d(TAG, "🔑 userId: '$userId'")
-            Log.d(TAG, "🔑 userId es null: ${userId == null}")
-            Log.d(TAG, "🔑 userId es vacío: ${userId?.isEmpty() == true}")
-            Log.d(TAG, "🔑 userId length: ${userId?.length ?: 0}")
+            Log.d(TAG, "loadCart - userId: $userId")
 
-            if (userId == null || userId.isEmpty()) {
-                Log.e(TAG, "❌❌❌ ERROR: Usuario no autenticado o userId vacío ❌❌❌")
-                Log.e(TAG, "❌ Por favor, cierra sesión y vuelve a iniciar sesión")
+            if (userId == null) {
+                Log.e(TAG, "loadCart - Usuario no autenticado")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Usuario no autenticado. Por favor, inicia sesión nuevamente."
+                    error = "Usuario no autenticado"
                 )
                 return@launch
             }
 
-            Log.d(TAG, "✅ Usuario autenticado con ID válido, cargando desde Firebase...")
-
             val result = cartRepository.getCart(userId)
             result.onSuccess { items ->
-                Log.d(TAG, "✅✅✅ CARRITO CARGADO: ${items.size} items ✅✅✅")
+                Log.d(TAG, "loadCart - Items cargados: ${items.size}")
                 items.forEachIndexed { index, item ->
-                    Log.d(TAG, "  📦 Item $index: ${item.productName} x${item.quantity} - $${item.unitPrice}")
+                    Log.d(TAG, "  Item $index: ${item.productName} - qty: ${item.quantity}")
                 }
-                calculateTotals(items)
+
                 _uiState.value = _uiState.value.copy(
                     items = items,
                     isLoading = false
                 )
+
+                // Recalcular totales con descuento actual si existe
+                calculateTotals(items, _uiState.value.discountPercentage)
             }.onFailure { error ->
-                Log.e(TAG, "❌❌❌ ERROR al cargar: ${error.message} ❌❌❌", error)
+                Log.e(TAG, "loadCart - Error: ${error.message}", error)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = error.message
                 )
             }
-            Log.d(TAG, "📥 ========================================== FIN")
-            Log.d(TAG, "")
         }
     }
 
     fun addToCart(productId: String, quantity: Int = 1) {
         viewModelScope.launch {
-            Log.d(TAG, "")
-            Log.d(TAG, "🛒 ==========================================")
-            Log.d(TAG, "🛒 INTENTANDO AGREGAR AL CARRITO")
-            Log.d(TAG, "🛒 productId: $productId, quantity: $quantity")
-            Log.d(TAG, "🛒 ==========================================")
+            Log.d(TAG, "addToCart - productId: $productId, quantity: $quantity")
 
             val userId = sessionManager.currentUserId.first()
-            Log.d(TAG, "🔑 userId obtenido: '$userId'")
-            Log.d(TAG, "🔑 userId es null: ${userId == null}")
-            Log.d(TAG, "🔑 userId es vacío: ${userId?.isEmpty() == true}")
-            Log.d(TAG, "🔑 userId length: ${userId?.length ?: 0}")
+            Log.d(TAG, "addToCart - userId: $userId")
 
-            if (userId == null || userId.isEmpty()) {
-                Log.e(TAG, "❌❌❌ ERROR: Usuario no autenticado o userId vacío ❌❌❌")
-                Log.e(TAG, "❌ Por favor, cierra sesión y vuelve a iniciar sesión")
+            if (userId == null) {
+                Log.e(TAG, "addToCart - Usuario no autenticado")
                 _uiState.value = _uiState.value.copy(
-                    error = "Usuario no autenticado. Por favor, inicia sesión nuevamente."
+                    error = "Usuario no autenticado"
                 )
                 return@launch
             }
 
-            Log.d(TAG, "✅ Usuario autenticado con ID válido, llamando al repositorio...")
-
             val result = cartRepository.addToCart(userId, productId, quantity)
             result.onSuccess { items ->
-                Log.d(TAG, "✅✅✅ ÉXITO! Items en carrito: ${items.size} ✅✅✅")
-                items.forEachIndexed { index, item ->
-                    Log.d(TAG, "  📦 Item $index: ${item.productName} x${item.quantity}")
-                }
-                calculateTotals(items)
+                Log.d(TAG, "addToCart - Éxito! Items en carrito: ${items.size}")
                 _uiState.value = _uiState.value.copy(
                     items = items,
                     error = null
                 )
-                Log.d(TAG, "🛒 Estado actualizado con ${items.size} items")
+                calculateTotals(items, _uiState.value.discountPercentage)
             }.onFailure { error ->
-                Log.e(TAG, "❌❌❌ ERROR al agregar: ${error.message} ❌❌❌", error)
+                Log.e(TAG, "addToCart - Error: ${error.message}", error)
                 _uiState.value = _uiState.value.copy(
                     error = error.message ?: "Error al agregar al carrito"
                 )
             }
-            Log.d(TAG, "🛒 ========================================== FIN")
-            Log.d(TAG, "")
         }
     }
 
@@ -178,11 +145,11 @@ class CartViewModel(
 
             val result = cartRepository.updateCartItemQuantity(userId, productId, newQuantity)
             result.onSuccess { items ->
-                calculateTotals(items)
                 _uiState.value = _uiState.value.copy(
                     items = items,
                     isLoading = false
                 )
+                calculateTotals(items, _uiState.value.discountPercentage)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -207,11 +174,11 @@ class CartViewModel(
 
             val result = cartRepository.removeFromCart(userId, productId)
             result.onSuccess { items ->
-                calculateTotals(items)
                 _uiState.value = _uiState.value.copy(
                     items = items,
                     isLoading = false
                 )
+                calculateTotals(items, _uiState.value.discountPercentage)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -222,23 +189,83 @@ class CartViewModel(
     }
 
     fun applyDiscountCode(code: String) {
-        val isValid = cartRepository.validateDiscountCode(code)
+        viewModelScope.launch {
+            Log.d(TAG, "applyDiscountCode - Código ingresado: $code")
 
-        if (isValid) {
-            _uiState.value = _uiState.value.copy(
-                discountCode = code,
-                isDiscountApplied = true,
-                error = null
-            )
-            calculateTotals(_uiState.value.items, code)
-        } else {
-            _uiState.value = _uiState.value.copy(
-                error = "Código de descuento inválido",
-                discountCode = "",
-                isDiscountApplied = false
-            )
-            calculateTotals(_uiState.value.items)
+            // Validar que el código no esté vacío
+            if (code.isBlank()) {
+                _uiState.value = _uiState.value.copy(
+                    discountError = "Ingrese un código de descuento",
+                    isDiscountApplied = false
+                )
+                return@launch
+            }
+
+            // Validar el código con Firebase
+            val result = discountRepository.validateDiscountCode(code)
+
+            result.onSuccess { discountCode ->
+                if (discountCode != null) {
+                    // Código válido - aplicar descuento
+                    Log.d(TAG, "Código válido: ${discountCode.code} - ${discountCode.discountPercentage}%")
+
+                    _uiState.value = _uiState.value.copy(
+                        discountCode = discountCode.code,
+                        discountCodeId = discountCode.id,
+                        discountPercentage = discountCode.discountPercentage,
+                        isDiscountApplied = true,
+                        discountError = null
+                    )
+
+                    // Recalcular totales con descuento
+                    calculateTotals(_uiState.value.items, discountCode.discountPercentage)
+                } else {
+                    // Código no válido
+                    Log.d(TAG, "Código inválido: $code")
+
+                    _uiState.value = _uiState.value.copy(
+                        discountError = "Código de descuento inválido o expirado",
+                        discountCode = "",
+                        discountCodeId = "",
+                        discountPercentage = 0.0,
+                        isDiscountApplied = false
+                    )
+
+                    // Recalcular sin descuento
+                    calculateTotals(_uiState.value.items, 0.0)
+                }
+            }.onFailure { error ->
+                Log.e(TAG, "Error al validar código: ${error.message}", error)
+
+                _uiState.value = _uiState.value.copy(
+                    discountError = "Error al validar el código",
+                    discountCode = "",
+                    discountCodeId = "",
+                    discountPercentage = 0.0,
+                    isDiscountApplied = false
+                )
+
+                calculateTotals(_uiState.value.items, 0.0)
+            }
         }
+    }
+
+    /**
+     * Remueve el descuento aplicado y recalcula los totales
+     */
+    fun removeDiscount() {
+        Log.d(TAG, "removeDiscount - Quitando descuento")
+
+        _uiState.value = _uiState.value.copy(
+            discountCode = "",
+            discountCodeId = "",
+            discountPercentage = 0.0,
+            isDiscountApplied = false,
+            discountError = null
+        )
+
+        // Recalcular totales sin descuento
+        calculateTotals(_uiState.value.items, 0.0)
     }
 
     fun checkout() {
@@ -270,8 +297,21 @@ class CartViewModel(
                 null
             }
 
-            val result = cartRepository.checkout(userId, user, discountCode)
+            val discountPercentage = if (_uiState.value.isDiscountApplied) {
+                _uiState.value.discountPercentage
+            } else {
+                0.0
+            }
+
+            val result = cartRepository.checkout(userId, user, discountCode, discountPercentage)
             result.onSuccess { order ->
+                // Si se usó un código de descuento, incrementar su contador
+                if (_uiState.value.isDiscountApplied && _uiState.value.discountCodeId.isNotEmpty()) {
+                    viewModelScope.launch {
+                        discountRepository.incrementUsageCount(_uiState.value.discountCodeId)
+                    }
+                }
+
                 _uiState.value = CartUiState(
                     checkoutSuccess = true,
                     lastOrder = order
@@ -293,13 +333,12 @@ class CartViewModel(
         _uiState.value = _uiState.value.copy(error = null)
     }
 
-    private fun calculateTotals(items: List<CartItem>, discountCode: String? = null) {
+    private fun calculateTotals(items: List<CartItem>, discountPercentage: Double = 0.0) {
         val subtotal = items.sumOf { it.subtotal }
-        val discount = when (discountCode?.uppercase()) {
-            "GAMER10" -> subtotal * 0.10
-            "GAMER20" -> subtotal * 0.20
-            "DUOC50" -> subtotal * 0.50
-            else -> 0.0
+        val discount = if (discountPercentage > 0) {
+            subtotal * (discountPercentage / 100.0)
+        } else {
+            0.0
         }
         val total = subtotal - discount
 
@@ -308,6 +347,8 @@ class CartViewModel(
             discount = discount,
             total = total
         )
+
+        Log.d(TAG, "Totales calculados - Subtotal: $subtotal, Descuento: $discount ($discountPercentage%), Total: $total")
     }
 }
 

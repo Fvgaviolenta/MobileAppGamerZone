@@ -90,11 +90,12 @@ fun NavGraph(
             CatalogScreen(
                 category = null,
                 onOpenDrawer = onOpenDrawer,
-                onNavigateToCart = {
-                    navController.navigate(Screen.Cart.route)
-                },
+                onBackClick = { navController.popBackStack() },
                 onProductClick = { productId ->
                     // TODO: Navegar a detalle de producto si se implementa
+                },
+                onNavigateToCart = {
+                    navController.navigate(Screen.Cart.route)
                 },
                 cartViewModel = sharedCartViewModel
             )
@@ -105,11 +106,12 @@ fun NavGraph(
             CatalogScreen(
                 category = category,
                 onOpenDrawer = onOpenDrawer,
-                onNavigateToCart = {
-                    navController.navigate(Screen.Cart.route)
-                },
+                onBackClick = { navController.popBackStack() },
                 onProductClick = { productId ->
                     // TODO: Navegar a detalle de producto si se implementa
+                },
+                onNavigateToCart = {
+                    navController.navigate(Screen.Cart.route)
                 },
                 cartViewModel = sharedCartViewModel
             )
@@ -130,6 +132,7 @@ fun NavGraph(
         composable(route = Screen.Cart.route) {
             CartScreen(
                 onOpenDrawer = onOpenDrawer,
+                onBackClick = { navController.popBackStack() },
                 onScanQR = {
                     navController.navigate("qr_scanner")
                 },

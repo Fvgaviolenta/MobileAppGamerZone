@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // REGLAS PARA USUARIOS
+    // ============================================
+    match /users/{userId} {
+      // Permitir lectura y escritura (sin autenticación por ahora)
+      allow read, write: if true;
+    }
+
+    // ============================================
+    // REGLAS PARA PRODUCTOS
+    // ============================================
+    match /products/{productId} {
+      // Permitir lectura a todos
+      allow read: if true;
+
+      // Permitir escritura a todos (temporal - en producción solo admin)
+      allow write: if true;
+    }
+
+    // ============================================
+    // REGLAS PARA CARRITOS
+    // ============================================
+    match /carts/{userId} {
+      // Permitir lectura y escritura a todos (temporal)
+      allow read, write: if true;
+    }
+
+    // ============================================
+    // REGLAS PARA ÓRDENES
+    // ============================================
+    match /orders/{orderId} {
+      // Permitir lectura y escritura a todos (temporal)
+      allow read, write: if true;
+    }
+
+    // ============================================
+    // REGLAS PARA CÓDIGOS DE DESCUENTO ⭐ IMPORTANTE
+    // ============================================
+    match /discountCodes/{discountId} {
+      // Permitir lectura a TODOS (sin requerir autenticación)
+      allow read: if true;
+
+      // Permitir escritura a todos (temporal - en producción solo admin)
+      allow write: if true;
+    }
+
+    // ============================================
+    // DENEGAR TODO LO DEMÁS
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

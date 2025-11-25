@@ -3,7 +3,6 @@ package com.example.appgamerzone.data.repository
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.example.appgamerzone.data.model.CartItem
-import com.example.appgamerzone.data.model.CartItemSimple
 import com.example.appgamerzone.data.model.Order
 import com.example.appgamerzone.data.model.OrderStatus
 import com.example.appgamerzone.data.model.User
@@ -20,105 +19,57 @@ class FirebaseCartRepository(
     private val cartsCollection = db.collection("carts")
     private val ordersCollection = db.collection("orders")
 
-    /**
-     * Obtiene el carrito del usuario
-     * 1. Lee los IDs y cantidades de Firebase
-     * 2. Busca la información completa de cada producto
-     * 3. Construye los CartItems completos
-     */
     suspend fun getCart(userId: String): Result<List<CartItem>> {
         return try {
-            Log.d(TAG, "=== INICIO getCart ===")
             Log.d(TAG, "getCart - userId: $userId")
-
             val document = cartsCollection.document(userId).get().await()
 
             if (!document.exists()) {
-                Log.d(TAG, "getCart - No existe documento de carrito")
+                Log.d(TAG, "getCart - No existe documento de carrito para userId: $userId")
                 return Result.success(emptyList())
             }
 
-            // Obtener la lista de items simples (solo ID y cantidad)
             @Suppress("UNCHECKED_CAST")
-            val itemsSimple = (document.data?.get("items") as? List<Map<String, Any?>>)?.map {
-                CartItemSimple.fromMap(it)
+            val itemsList = (document.data?.get("items") as? List<Map<String, Any?>>)?.map {
+                CartItem.fromMap(it)
             } ?: emptyList()
 
-            Log.d(TAG, "getCart - Items simples encontrados: ${itemsSimple.size}")
-
-            // Construir CartItems completos buscando info de productos
-            val cartItems = mutableListOf<CartItem>()
-
-            for (simpleItem in itemsSimple) {
-                Log.d(TAG, "getCart - Buscando producto: ${simpleItem.productId}")
-
-                val productResult = productRepository.getProductById(simpleItem.productId)
-
-                if (productResult.isSuccess) {
-                    val product = productResult.getOrNull()!!
-                    val cartItem = CartItem(
-                        productId = product.id,
-                        productName = product.name,
-                        productImage = product.imageUrl,
-                        quantity = simpleItem.quantity,
-                        unitPrice = product.price,
-                        availableStock = product.stock
-                    )
-                    cartItems.add(cartItem)
-                    Log.d(TAG, "getCart - Producto agregado: ${product.name}, qty: ${simpleItem.quantity}")
-                } else {
-                    Log.e(TAG, "getCart - Error al obtener producto ${simpleItem.productId}")
-                }
-            }
-
-            Log.d(TAG, "getCart - CartItems completos: ${cartItems.size}")
-            Log.d(TAG, "=== FIN getCart ===")
-
-            Result.success(cartItems)
+            Log.d(TAG, "getCart - Items encontrados: ${itemsList.size}")
+            Result.success(itemsList)
         } catch (e: Exception) {
             Log.e(TAG, "getCart - Error: ${e.message}", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Agrega un producto al carrito
-     * 1. Verifica stock disponible
-     * 2. Obtiene carrito simple (solo IDs)
-     * 3. Agrega/actualiza el producto
-     * 4. Guarda solo IDs y cantidades en Firebase
-     */
     suspend fun addToCart(userId: String, productId: String, quantity: Int = 1): Result<List<CartItem>> {
         return try {
-            Log.d(TAG, "=== INICIO addToCart ===")
             Log.d(TAG, "addToCart - userId: $userId, productId: $productId, quantity: $quantity")
 
-            // Verificar que el producto existe y tiene stock
+            // Verificar stock disponible
             val productResult = productRepository.getProductById(productId)
             val product = productResult.getOrThrow()
 
-            Log.d(TAG, "addToCart - Producto encontrado: ${product.name}, Stock: ${product.stock}")
+            Log.d(TAG, "addToCart - Producto: ${product.name}, Stock: ${product.stock}")
 
             if (product.stock < quantity) {
                 Log.w(TAG, "addToCart - Stock insuficiente")
                 return Result.failure(IllegalStateException("Stock insuficiente. Disponible: ${product.stock}"))
             }
 
-            // Obtener carrito simple actual
-            val currentSimpleCart = getSimpleCart(userId)
-            Log.d(TAG, "addToCart - Carrito simple actual: ${currentSimpleCart.size} items")
+            // Obtener carrito actual
+            val currentCart = getCart(userId).getOrElse { emptyList() }.toMutableList()
+            Log.d(TAG, "addToCart - Carrito actual tiene ${currentCart.size} items")
 
-            // Buscar si el producto ya está en el carrito
-            val existingIndex = currentSimpleCart.indexOfFirst { it.productId == productId }
+            // Verificar si el producto ya está en el carrito
+            val existingItemIndex = currentCart.indexOfFirst { it.productId == productId }
 
-            val updatedSimpleCart = currentSimpleCart.toMutableList()
+            if (existingItemIndex != -1) {
+                // Actualizar cantidad
+                val existingItem = currentCart[existingItemIndex]
+                val newQuantity = existingItem.quantity + quantity
 
-            if (existingIndex != -1) {
-                // Producto ya existe, actualizar cantidad
-                val existing = currentSimpleCart[existingIndex]
-                val newQuantity = existing.quantity + quantity
-
-                Log.d(TAG, "addToCart - Producto existe, actualizando cantidad: $newQuantity")
+                Log.d(TAG, "addToCart - Producto ya existe, nueva cantidad: $newQuantity")
 
                 if (newQuantity > product.stock) {
                     return Result.failure(
@@ -126,39 +77,41 @@ class FirebaseCartRepository(
                     )
                 }
 
-                updatedSimpleCart[existingIndex] = CartItemSimple(productId, newQuantity)
+                currentCart[existingItemIndex] = existingItem.copy(
+                    quantity = newQuantity,
+                    availableStock = product.stock
+                )
             } else {
-                // Producto nuevo, agregar
-                Log.d(TAG, "addToCart - Producto nuevo, agregando")
-                updatedSimpleCart.add(CartItemSimple(productId, quantity))
+                // Agregar nuevo item
+                Log.d(TAG, "addToCart - Agregando nuevo item al carrito")
+                val newItem = CartItem(
+                    productId = product.id,
+                    productName = product.name,
+                    productImage = product.imageUrl,
+                    quantity = quantity,
+                    unitPrice = product.price,
+                    availableStock = product.stock
+                )
+                currentCart.add(newItem)
             }
 
-            // Guardar carrito simple en Firebase
-            saveSimpleCart(userId, updatedSimpleCart)
-            Log.d(TAG, "addToCart - Carrito guardado: ${updatedSimpleCart.size} items")
+            // Guardar carrito
+            saveCart(userId, currentCart)
+            Log.d(TAG, "addToCart - Carrito guardado con ${currentCart.size} items")
 
-            // Retornar CartItems completos
-            val result = getCart(userId)
-            Log.d(TAG, "=== FIN addToCart ===")
-
-            result
+            Result.success(currentCart)
         } catch (e: Exception) {
             Log.e(TAG, "addToCart - Error: ${e.message}", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Actualiza la cantidad de un producto en el carrito
-     */
     suspend fun updateCartItemQuantity(
         userId: String,
         productId: String,
         newQuantity: Int
     ): Result<List<CartItem>> {
         return try {
-            Log.d(TAG, "updateCartItemQuantity - productId: $productId, newQuantity: $newQuantity")
-
             if (newQuantity < 1) {
                 return removeFromCart(userId, productId)
             }
@@ -173,68 +126,53 @@ class FirebaseCartRepository(
                 )
             }
 
-            // Actualizar carrito simple
-            val currentSimpleCart = getSimpleCart(userId).toMutableList()
-            val itemIndex = currentSimpleCart.indexOfFirst { it.productId == productId }
+            val currentCart = getCart(userId).getOrElse { emptyList() }.toMutableList()
+            val itemIndex = currentCart.indexOfFirst { it.productId == productId }
 
             if (itemIndex == -1) {
                 return Result.failure(IllegalStateException("Producto no encontrado en el carrito"))
             }
 
-            currentSimpleCart[itemIndex] = CartItemSimple(productId, newQuantity)
-            saveSimpleCart(userId, currentSimpleCart)
+            currentCart[itemIndex] = currentCart[itemIndex].copy(
+                quantity = newQuantity,
+                availableStock = product.stock
+            )
 
-            getCart(userId)
+            saveCart(userId, currentCart)
+            Result.success(currentCart)
         } catch (e: Exception) {
-            Log.e(TAG, "updateCartItemQuantity - Error: ${e.message}", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Elimina un producto del carrito
-     */
     suspend fun removeFromCart(userId: String, productId: String): Result<List<CartItem>> {
         return try {
-            Log.d(TAG, "removeFromCart - productId: $productId")
+            val currentCart = getCart(userId).getOrElse { emptyList() }.toMutableList()
+            currentCart.removeIf { it.productId == productId }
 
-            val currentSimpleCart = getSimpleCart(userId).toMutableList()
-            currentSimpleCart.removeIf { it.productId == productId }
-
-            saveSimpleCart(userId, currentSimpleCart)
-
-            getCart(userId)
+            saveCart(userId, currentCart)
+            Result.success(currentCart)
         } catch (e: Exception) {
-            Log.e(TAG, "removeFromCart - Error: ${e.message}", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Limpia el carrito
-     */
     suspend fun clearCart(userId: String): Result<Unit> {
         return try {
-            Log.d(TAG, "clearCart - userId: $userId")
             cartsCollection.document(userId).delete().await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "clearCart - Error: ${e.message}", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Realiza el checkout (compra)
-     */
     suspend fun checkout(
         userId: String,
         user: User,
-        discountCode: String? = null
+        discountCode: String? = null,
+        discountPercentage: Double = 0.0
     ): Result<Order> {
         return try {
-            Log.d(TAG, "=== INICIO checkout ===")
-
             val cartItems = getCart(userId).getOrThrow()
 
             if (cartItems.isEmpty()) {
@@ -251,10 +189,16 @@ class FirebaseCartRepository(
                 }
             }
 
-            // Calcular totales
+            // Calcular totales usando el porcentaje de descuento
             val subtotal = cartItems.sumOf { it.subtotal }
-            val discount = calculateDiscount(subtotal, discountCode)
+            val discount = if (discountPercentage > 0) {
+                subtotal * (discountPercentage / 100.0)
+            } else {
+                0.0
+            }
             val total = subtotal - discount
+
+            Log.d(TAG, "checkout - Subtotal: $subtotal, Descuento: $discount ($discountPercentage%), Total: $total")
 
             // Crear orden
             val orderRef = ordersCollection.document()
@@ -274,28 +218,21 @@ class FirebaseCartRepository(
 
             // Guardar orden
             orderRef.set(order.toMap()).await()
-            Log.d(TAG, "checkout - Orden creada: ${order.id}")
 
             // Descontar stock
             for (item in cartItems) {
                 productRepository.decreaseStock(item.productId, item.quantity)
-                Log.d(TAG, "checkout - Stock descontado para: ${item.productName}")
             }
 
             // Limpiar carrito
             clearCart(userId)
 
-            Log.d(TAG, "=== FIN checkout ===")
             Result.success(order)
         } catch (e: Exception) {
-            Log.e(TAG, "checkout - Error: ${e.message}", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Obtiene las órdenes de un usuario
-     */
     suspend fun getUserOrders(userId: String): Result<List<Order>> {
         return try {
             val querySnapshot = ordersCollection
@@ -309,63 +246,22 @@ class FirebaseCartRepository(
 
             Result.success(orders)
         } catch (e: Exception) {
-            Log.e(TAG, "getUserOrders - Error: ${e.message}", e)
             Result.failure(e)
         }
     }
 
-    // ========== FUNCIONES PRIVADAS ==========
-
-    /**
-     * Obtiene el carrito simple (solo IDs y cantidades) de Firebase
-     */
-    private suspend fun getSimpleCart(userId: String): List<CartItemSimple> {
-        return try {
-            val document = cartsCollection.document(userId).get().await()
-
-            if (!document.exists()) {
-                return emptyList()
-            }
-
-            @Suppress("UNCHECKED_CAST")
-            val items = (document.data?.get("items") as? List<Map<String, Any?>>)?.map {
-                CartItemSimple.fromMap(it)
-            } ?: emptyList()
-
-            Log.d(TAG, "getSimpleCart - Items: ${items.size}")
-            items
-        } catch (e: Exception) {
-            Log.e(TAG, "getSimpleCart - Error: ${e.message}", e)
-            emptyList()
-        }
-    }
-
-    /**
-     * Guarda el carrito simple en Firebase
-     * Solo guarda IDs de productos y cantidades
-     */
-    private suspend fun saveSimpleCart(userId: String, items: List<CartItemSimple>) {
+    private suspend fun saveCart(userId: String, items: List<CartItem>) {
         try {
-            Log.d(TAG, "saveSimpleCart - userId: $userId, items: ${items.size}")
-
+            Log.d(TAG, "saveCart - userId: $userId, items: ${items.size}")
             val cartData = hashMapOf(
                 "userId" to userId,
                 "items" to items.map { it.toMap() },
                 "updatedAt" to System.currentTimeMillis()
             )
-
             cartsCollection.document(userId).set(cartData).await()
-            Log.d(TAG, "saveSimpleCart - Guardado exitoso")
-
-            // Verificar que se guardó
-            val verification = cartsCollection.document(userId).get().await()
-            if (verification.exists()) {
-                Log.d(TAG, "saveSimpleCart - Verificación OK")
-            } else {
-                Log.e(TAG, "saveSimpleCart - ERROR: No se guardó el documento")
-            }
+            Log.d(TAG, "saveCart - Carrito guardado exitosamente")
         } catch (e: Exception) {
-            Log.e(TAG, "saveSimpleCart - Error: ${e.message}", e)
+            Log.e(TAG, "saveCart - Error al guardar: ${e.message}", e)
             throw e
         }
     }
